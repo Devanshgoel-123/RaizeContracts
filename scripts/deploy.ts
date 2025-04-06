@@ -1,15 +1,25 @@
 import { ethers } from "hardhat";
-
+import hre from "hardhat";
+import dotenv from "dotenv";
+dotenv.config();
 async function main() {
-  const account=new ethers.Wallet("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
-  console.log("Deploying contract from:",account.getAddress());
+  //const provider = new ethers.JsonRpcProvider("https://rpc.api.moonbase.moonbeam.network");
+  const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545/");
+  const wallet = new ethers.Wallet(`${process.env.PRIVATE_KEY}`, provider);
 
-  const ContractFactory = await ethers.getContractFactory("MarketFactory")
-  const admin=account.getAddress();
-  const contract = await ContractFactory.deploy(); 
+  console.log("Deploying contract from:",await wallet.getAddress());
 
-  await contract.deployed();
-  console.log("Contract deployed at:", contract.address);
+  const ContractFactory = await ethers.getContractFactory("MarketFactory",wallet)
+ 
+  const contract = await ContractFactory.deploy(wallet.getAddress()); 
+  await contract.waitForDeployment();
+
+  console.log("contract deployed at",contract.target)
+// //   await hre.network.provider.send("evm_increaseTime", [3600]); // Increase time by 1 hour
+// // await hre.network.provider.send("evm_mine");
+// await hre.network.provider.send("evm_setNextBlockTimestamp", [1743691805]); 
+// await hre.network.provider.send("evm_mine");  // Mine a new block to apply the time change
+   
 }
 
 main().catch((error) => {

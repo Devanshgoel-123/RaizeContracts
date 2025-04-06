@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
+import "hardhat/console.sol";
 
 struct Outcome{
     string name;
@@ -22,7 +23,19 @@ struct Market{
    uint64 deadline;
    Outcome winning_outcome;
    uint256 money_in_pool;
+   uint256 categoryId;
 }
+
+struct MarketInfo {
+    uint256 money_in_pool;
+    uint64 deadline;
+    bool is_settled;
+    bool is_active;
+    Outcome winning_outcome;
+    uint256 categoryId;
+    string name;
+}
+
 
 struct CryptoMarket{
     string name;
@@ -39,6 +52,7 @@ struct CryptoMarket{
    uint8 conditions;
    uint64 price_key;
    uint128 amount;
+   uint256 categoryId;
 }
 
 struct SportsMarket{
@@ -55,6 +69,7 @@ struct SportsMarket{
    uint256 money_in_pool;
    uint64 api_event_id;
    bool is_home;
+   uint256 categoryId;
 }
 
 struct UserPosition{
@@ -67,6 +82,19 @@ struct UserBet{
     UserPosition position;
 }
 
+
+struct UserPositionsForMarket{
+    UserBet user_bet;
+    uint256 market_id;
+    uint64 deadline;
+    uint256 money_in_pool;
+    uint256 categoryId;
+    bool is_settled;
+   bool is_active;
+   Outcome winning_outcome;
+   string name;
+   uint256 betId;
+}
 
 //USA to india ke liye legal compliance how to bypass, can be done using b2b stablecoin payment rail. Rates, legal compliance will be their headache.
 
@@ -130,7 +158,8 @@ contract MarketFactory{
             category:category,
             image:image,
             deadline:deadline,
-            market_id:markets_length
+            market_id:markets_length,
+            categoryId:2
           });
           markets[markets_length]=new_market;
           markets_length++;
@@ -165,7 +194,8 @@ contract MarketFactory{
             market_id:crypto_markets_length,
             conditions:conditions,
             price_key:priceKey,
-            amount:amount
+            amount:amount,
+            categoryId:0
         });
         crypto_markets[crypto_markets_length]=new_crypto_market;
         crypto_markets_length++;
@@ -197,7 +227,8 @@ contract MarketFactory{
             deadline:deadline,
             market_id:sports_markets_length,
             api_event_id:api_event_id,
-            is_home:is_home
+            is_home:is_home,
+            categoryId:1
         });
         sport_markets[sports_markets_length]=new_sports_market;
         sports_markets_length++;
@@ -412,7 +443,7 @@ contract MarketFactory{
             require(currentMarket.deadline > block.timestamp, "Market has expired, can't place a bet");
             require(currentMarket.is_active == true, "Market is not active");
             uint256 bought_shares=amount - (amount*PLATFORM_FEE/100);
-           uint256 money_in_pool=currentMarket.money_in_pool + bought_shares;
+            uint256 money_in_pool=currentMarket.money_in_pool + bought_shares;
             currentMarket.outcomes[token_to_mint].bought_shares+=bought_shares;
             currentMarket.money_in_pool=money_in_pool;
             num_bets[msg.sender][2][market_id] += 1;
@@ -424,7 +455,10 @@ contract MarketFactory{
                         has_claimed : false
                     })
             });
-            user_bets[msg.sender][2][market_id][numOfBets-1]=currentUserBet; 
+            user_bets[msg.sender][2][market_id][numOfBets-1]=currentUserBet;
+            console.log("Bought shares for user",user_bets[msg.sender][2][market_id][numOfBets-1].outcome.name,user_bets[msg.sender][2][market_id][numOfBets-1].outcome.bought_shares); 
+            console.log("The current user bet is",currentUserBet.outcome.name);
+            console.log("The num of bets is",num_bets[msg.sender][2][market_id]);
         }else if(market_type==0){
             require(market_id < sports_markets_length,"Market doesnt exist");
             SportsMarket storage currentMarket=sport_markets[market_id];
@@ -513,7 +547,6 @@ contract MarketFactory{
         }else{
             require(market_id < crypto_markets_length,"Market doesn't exist");
             CryptoMarket storage currentMarket=crypto_markets[market_id];
-            require(currentMarket.deadline < block.timestamp,"Market has not expired yet, can't claim winnings");
             require(currentMarket.is_active == false, "Market is active right now");
             UserBet storage currentUserBet=user_bets[msg.sender][1][market_id][bet_num];
             Outcome memory winningOutcome=currentMarket.winning_outcome;
@@ -527,11 +560,154 @@ contract MarketFactory{
             require(success, "Transfer failed");
         }    
     }
+
+
+    function get_user_positions_market(address userWallet) public view returns (UserPositionsForMarket[] memory) {
+    address user = userWallet;
+    address user2= msg.sender;
+    console.log("the user is",user,user2);
+    uint256 totalPositions = countUserPositions(user);
+    UserPositionsForMarket[] memory allUserBets = new UserPositionsForMarket[](totalPositions);
+
+    uint256 index = 0;
+    for (uint8 category = 0; category < 3; category++) {
+        uint256 marketCount = getMarketCount(category);
+        if(marketCount == 0) continue;
+        console.log("The market count is",marketCount,category);
+        for (uint256 marketId = 0; marketId < marketCount; marketId++) {
+            uint256 userBetsCount = num_bets[user][category][marketId];
+            console.log("The user bets count is",userBetsCount);
+            if (userBetsCount == 0) continue;
+
+            MarketInfo memory marketInfo = getMarketInfo(category, marketId);
+            console.log("The market info is",marketInfo.categoryId, marketInfo.winning_outcome.name, marketInfo.winning_outcome.bought_shares);
+            for (uint256 betId = 0; betId < userBetsCount; betId++) {
+                UserBet memory bet = getUserBet(user, category, marketId, betId);
+                if (bet.position.amount > 0) {
+                    allUserBets[index] = UserPositionsForMarket({
+                        user_bet: bet,
+                        market_id: marketId,
+                        money_in_pool: marketInfo.money_in_pool,
+                        deadline: marketInfo.deadline,
+                        categoryId: marketInfo.categoryId,
+                        is_settled: marketInfo.is_settled,
+                        is_active: marketInfo.is_active,
+                        winning_outcome: marketInfo.winning_outcome,
+                        name : marketInfo.name,
+                        betId : betId
+                    });
+                    index++;
+                }
+            }
+        }
+    }
+    return allUserBets;
+   }
     
+
+    function countUserPositions(address user) internal view returns (uint256 totalPositions) {
+    for (uint8 category = 0; category < 3; category++) {
+        uint256 marketCount = getMarketCount(category);
+        if(marketCount == 0) continue;
+        console.log("The market count in user position counting is",marketCount);
+        for (uint256 marketId = 0; marketId < marketCount; marketId++) {
+            uint256 userBetsCount = num_bets[user][category][marketId];
+            console.log("The user bet count in user position counting is",userBetsCount);
+            if(userBetsCount == 0) continue;
+            for (uint256 betId = 0; betId < userBetsCount; betId++) {
+                if (user_bets[user][category][marketId][betId].position.amount > 0) {
+                    totalPositions++;
+                }
+            }
+        }
+    }
+    }
+    
+    function getMarketInfo(uint8 category, uint256 marketId) internal view returns (MarketInfo memory) {
+    if (category == 0 && marketId < sports_markets_length) {
+        SportsMarket storage m = sport_markets[marketId];
+        return MarketInfo({
+            money_in_pool: m.money_in_pool,
+            deadline: m.deadline,
+            is_settled: m.is_settled,
+            is_active: m.is_active,
+            winning_outcome: m.winning_outcome,
+            categoryId: 0,
+            name:m.name
+        });
+    } else if (category == 1 && marketId < crypto_markets_length) {
+        CryptoMarket storage m = crypto_markets[marketId];
+        return MarketInfo({
+            money_in_pool: m.money_in_pool,
+            deadline: m.deadline,
+            is_settled: m.is_settled,
+            is_active: m.is_active,
+            winning_outcome: m.winning_outcome,
+            categoryId: 1,
+            name:m.name
+        });
+    } else if (category == 2 && marketId < markets_length) {
+        Market storage m = markets[marketId];
+        return MarketInfo({
+            money_in_pool: m.money_in_pool,
+            deadline: m.deadline,
+            is_settled: m.is_settled,
+            is_active: m.is_active,
+            winning_outcome: m.winning_outcome,
+            categoryId: 2,
+            name:m.name
+        });
+    }
+
+    revert("Invalid market access");
+}
+
+    function getMarketCount(uint8 category) internal view returns (uint256) {
+    if (category == 0) return sports_markets_length;
+    if (category == 1) return crypto_markets_length;
+    return markets_length;
+    }
+
+    function getUserBet(address user, uint8 category, uint256 marketId, uint256 betId) 
+    internal view returns (UserBet memory) 
+    {
+    return user_bets[user][category][marketId][betId];
+    }
+     
+
     function set_treasury_wallet(
         address payable wallet
     ) public OnlyAdmin{
         treasuryWallet=wallet;
     }
 
+    function get_all_markets() public view returns(Market[] memory){
+     Market[] memory all_markets = new Market[](markets_length);
+        for (uint256 i=0;i < markets_length;i++){
+            all_markets[i]=markets[i];
+        }
+        return all_markets;
+    }
+
+    function get_all_sports_markets() public view returns(SportsMarket[] memory){
+     SportsMarket[] memory all_markets = new SportsMarket[](sports_markets_length);
+     if(sports_markets_length == 0){
+        return new SportsMarket[](0);
+     }
+        for (uint256 i=0;i < sports_markets_length;i++){
+            all_markets[i]=sport_markets[i];
+        }
+        return all_markets;
+    }
+
+    function get_all_crypto_markets() public view returns(CryptoMarket[] memory){
+     CryptoMarket[] memory all_markets = new CryptoMarket[](crypto_markets_length);
+    if (crypto_markets_length == 0) {
+        return new CryptoMarket[](0); 
+    }
+    for (uint256 i=0;i < crypto_markets_length ;i++){
+            all_markets[i]=crypto_markets[i];
+        }
+        return all_markets;
+    }
 }

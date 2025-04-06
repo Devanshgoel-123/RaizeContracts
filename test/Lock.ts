@@ -9,9 +9,7 @@ describe("Lock", function () {
   async function deployContractAndSetVariables() {
     const MarketFactory = await ethers.getContractFactory("MarketFactory");
     const marketFactory = await MarketFactory.deploy(
-      "0x00ce496A3aE288Fec2BA5b73039DB4f7c31a9144",
-      "0x00ce496A3aE288Fec2BA5b73039DB4f7c31a9144",
-      "0x8f552a71EFE5eeFc207Bf75485b356A0b3f01eC9"
+      "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     );
 
     return { marketFactory };
@@ -20,12 +18,12 @@ describe("Lock", function () {
   it("Should set the right admin of the contract correctly", async function () {
     const {marketFactory} = await loadFixture(deployContractAndSetVariables);
     console.log("the value is",await marketFactory.admin())
-    expect(await marketFactory.admin()).to.equal("0x00ce496A3aE288Fec2BA5b73039DB4f7c31a9144");
+    expect(await marketFactory.admin()).to.equal("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
   });
   
 
   it("Should create a normal market correctly",async function (){
-    const wallet=await ethers.getSigner("0x00ce496A3aE288Fec2BA5b73039DB4f7c31a9144");
+    const wallet=await ethers.getSigner("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
     const {marketFactory} = await loadFixture(deployContractAndSetVariables);
     console.log("creating market")
     const tx=await marketFactory.connect(wallet).create_market(
@@ -43,40 +41,73 @@ describe("Lock", function () {
   })
 
 
-  it("Should Be able to buy shares")
+  it("Should Be able to buy shares",async function BuyShares(){
+    const wallet=await ethers.getSigner("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
+    const {marketFactory} = await loadFixture(deployContractAndSetVariables);
+    console.log("creating market")
+    const tx=await marketFactory.connect(wallet).create_market(
+      "Will Trump Win the elections ?",
+      "Will Doland Trump win the 2024 elections in US?",
+      "Yes",
+      "No",
+      "Politics",
+      "https://stellaswap.medium.com/",
+      1744024798
+    )
+    await tx.wait()
+    const buy=await marketFactory.connect(wallet).buy_shares(
+      0,
+      0,
+      2,
+      {
+        value: ethers.parseEther("10") // sending 0.1 ETH
+      }
+    )
+    await buy.wait()
+    expect(buy).to.be.ok;
+  })
 
 
+  it("should be able to show user positions",async function(){
+    const wallet=await ethers.getSigner("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
+    const {marketFactory} = await loadFixture(deployContractAndSetVariables);
+    const tx=await marketFactory.connect(wallet).create_market(
+      "Will Trump Win the elections ?",
+      "Will Doland Trump win the 2024 elections in US?",
+      "Yes",
+      "No",
+      "Politics",
+      "https://stellaswap.medium.com/",
+      1744024798
+    )
+    await tx.wait()
+    const buy=await marketFactory.connect(wallet).buy_shares(
+      0,
+      0,
+      2,
+      {
+        value: ethers.parseEther("10") // sending 0.1 ETH
+      }
+    )
+    await buy.wait()
+    const buy2=await marketFactory.connect(wallet).buy_shares(
+      0,
+      1,
+      2,
+      {
+        value: ethers.parseEther("5") // sending 0.1 ETH
+      }
+    )
+    await buy2.wait()
+    expect(buy2).to.be.ok;
+
+    const user_markets=await marketFactory.connect(wallet).get_user_positions_market(wallet.address);
+    console.log("The user markets are:",user_markets)
+  })
 });
 
 
-describe("Deployment", function () {
-  
 
-  // it("Should set the right owner", async function () {
-  //   const { lock, owner } = await loadFixture(deployOneYearLockFixture);
-
-  //   expect(await lock.owner()).to.equal(owner.address);
-  // });
-
-  // it("Should receive and store the funds to lock", async function () {
-  //   const { lock, lockedAmount } = await loadFixture(
-  //     deployOneYearLockFixture
-  //   );
-
-  //   expect(await hre.ethers.provider.getBalance(lock.target)).to.equal(
-  //     lockedAmount
-  //   );
-  // });
-
-  // it("Should fail if the unlockTime is not in the future", async function () {
-  //   // We don't use the fixture here because we want a different deployment
-  //   const latestTime = await time.latest();
-  //   const Lock = await hre.ethers.getContractFactory("Lock");
-  //   await expect(Lock.deploy(latestTime, { value: 1 })).to.be.revertedWith(
-  //     "Unlock time should be in the future"
-  //   );
-  // });
-});
 
 // describe("Withdrawals", function () {
 //   describe("Validations", function () {
