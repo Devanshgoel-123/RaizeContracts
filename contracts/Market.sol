@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "hardhat/console.sol";
 
 struct Outcome{
@@ -96,13 +97,10 @@ struct UserPositionsForMarket{
    uint256 betId;
 }
 
-//USA to india ke liye legal compliance how to bypass, can be done using b2b stablecoin payment rail. Rates, legal compliance will be their headache.
 
 
-contract MarketFactory{
+contract MarketFactory is Ownable{
     address public admin;
-    // IERC20 public USDC_TOKEN;
-    // uint8 internal GLMR_USDT=137;
     address payable private treasuryWallet;
     uint8 PLATFORM_FEE=5;
     mapping (uint => Market) public markets;
@@ -115,17 +113,23 @@ contract MarketFactory{
     // [userAddress][category][market_id][bet_number] -> userBet
     mapping (address => mapping (uint8 => mapping (uint256 => uint256) )) public num_bets;
     // [userAddress][category][market_id] -> num_bets
-    constructor(address payable _treasuryWallet){
+
+    event MarketCreated(string name, uint256 deadline, uint256 indexed marketId);
+    event SportsMarketCreated(string name, uint256 deadline, uint256 indexed marketId);
+    event CryptoMarketCreated(string name, uint256 deadline, uint256 indexed marketId);
+    event SharesBought(uint256 indexed marketId, uint8 outcome_index, uint8 categoryId);
+    event ClaimWinnings(address user, uint256 marketId, uint256 categoryId, uint256 betId);
+    event SettleMarket(uint256 indexed marketId, uint8 outcome_index);
+    event SettleSportsMarket(uint256 indexed marketId, uint8 outcome_index);
+    event SettleCryptoMarket(uint256 indexed marketId, uint8 outcome_index);
+
+
+    constructor(address payable _treasuryWallet) Ownable(msg.sender){
         admin=msg.sender;
         markets_length=0;
         crypto_markets_length=0;
         sports_markets_length=0;
         treasuryWallet=_treasuryWallet;
-    }
-
-    modifier OnlyAdmin() {
-        require(msg.sender == admin,"Only the admin can call this function");
-        _;
     }
 
     function create_share_tokens(string memory outcome1, string memory outcome2) internal pure returns (Outcome[2] memory) {
@@ -145,7 +149,7 @@ contract MarketFactory{
         string memory category,
         string memory image,
         uint64 deadline
-    ) public OnlyAdmin returns (bool){
+    ) public onlyOwner returns (bool){
           Outcome[2] memory outcomes = create_share_tokens(outcome1, outcome2);
           Market memory new_market=Market({
             name:name,
@@ -162,6 +166,7 @@ contract MarketFactory{
             categoryId:2
           });
           markets[markets_length]=new_market;
+          emit MarketCreated(name, deadline, markets_length);
           markets_length++;
           return true;
           //create event for market
@@ -178,7 +183,7 @@ contract MarketFactory{
         uint8 conditions,
         uint64 priceKey,
         uint128 amount
-    ) public OnlyAdmin{
+    ) public onlyOwner{
         Outcome[2] memory outcomes = create_share_tokens(outcome1, outcome2);
         CryptoMarket memory new_crypto_market=CryptoMarket({
             name:name,
@@ -198,8 +203,9 @@ contract MarketFactory{
             categoryId:0
         });
         crypto_markets[crypto_markets_length]=new_crypto_market;
+        emit CryptoMarketCreated(name, deadline, crypto_markets_length);
         crypto_markets_length++;
-         //create event for crypto_market
+        
     }
 
     function create_sports_market(
@@ -212,7 +218,7 @@ contract MarketFactory{
         uint64 deadline,
         uint64 api_event_id,
         bool is_home
-    ) public OnlyAdmin{
+    ) public onlyOwner{
         Outcome[2] memory outcomes = create_share_tokens(outcome1, outcome2);
         SportsMarket memory new_sports_market=SportsMarket({
             name:name,
@@ -231,8 +237,8 @@ contract MarketFactory{
             categoryId:1
         });
         sport_markets[sports_markets_length]=new_sports_market;
+        emit SportsMarketCreated(name, deadline,sports_markets_length);
         sports_markets_length++;
-
         //Emit event
     }
     
@@ -294,7 +300,7 @@ contract MarketFactory{
     function settle_sports_market(
         uint256 market_id,
         uint8 winning_outcome
-    ) public OnlyAdmin{
+    ) public onlyOwner{
         require(market_id < sports_markets_length,"The market does not exist");
         SportsMarket storage currentMarket=sport_markets[market_id];
         require(currentMarket.is_settled == false, "Market has already been settled");
@@ -309,14 +315,13 @@ contract MarketFactory{
         }
         currentMarket.is_settled=true;
         currentMarket.is_active=false;
-
-        //Emit event
+        emit SettleSportsMarket(market_id, winning_outcome);
     }
 
    function settle_crypto_market_manually(
         uint256 market_id,
         uint8 winning_outcome
-    ) public OnlyAdmin{
+    ) public onlyOwner{
         require(market_id < crypto_markets_length,"The market does not exist");
         CryptoMarket storage currentMarket=crypto_markets[market_id];
         require(currentMarket.is_settled == false, "Market has already been settled");
@@ -328,14 +333,14 @@ contract MarketFactory{
         }
         currentMarket.is_settled=true;
         currentMarket.is_active=false;
-
+        emit SettleCryptoMarket(market_id, winning_outcome);
         //Emit Event
     }
 
    function settle_market(
       uint256 market_id,
       uint8 winning_outcome
-   ) public OnlyAdmin{
+   ) public onlyOwner{
     require(market_id < markets_length, "Market Does not exist");
    
     Market storage currentMarket=markets[market_id];
@@ -350,12 +355,13 @@ contract MarketFactory{
     }
     currentMarket.is_settled=true;
     currentMarket.is_active=false;
+    emit SettleMarket(market_id, winning_outcome);
    }
 
     function toggle_market(
         uint256 market_id,
         uint8 category
-    ) public OnlyAdmin{
+    ) public onlyOwner{
         require(category<3,"Please Input correct Category for the markets");
         if(category==2){
             require((category==2 && market_id < markets_length),"Please Input correct market Id");
@@ -459,6 +465,7 @@ contract MarketFactory{
             console.log("Bought shares for user",user_bets[msg.sender][2][market_id][numOfBets-1].outcome.name,user_bets[msg.sender][2][market_id][numOfBets-1].outcome.bought_shares); 
             console.log("The current user bet is",currentUserBet.outcome.name);
             console.log("The num of bets is",num_bets[msg.sender][2][market_id]);
+            emit SharesBought(market_id, token_to_mint, market_type);
         }else if(market_type==0){
             require(market_id < sports_markets_length,"Market doesnt exist");
             SportsMarket storage currentMarket=sport_markets[market_id];
@@ -478,6 +485,7 @@ contract MarketFactory{
                     })
             });
             user_bets[msg.sender][0][market_id][numOfBets-1]=currentUserBet; 
+            emit SharesBought(market_id, token_to_mint, market_type);
         }else{
             require(market_id < crypto_markets_length,"Market doesnt exist");
             CryptoMarket storage currentMarket=crypto_markets[market_id];
@@ -497,11 +505,13 @@ contract MarketFactory{
                     })
             });
             user_bets[msg.sender][1][market_id][numOfBets-1]=currentUserBet; 
+             emit SharesBought(market_id, token_to_mint, market_type);
         }
+       
         return true;
     }
 
-    function get_treasury_wallet() public view OnlyAdmin returns(address){
+    function get_treasury_wallet() public view onlyOwner returns(address){
         return treasuryWallet;
     }
 
@@ -527,7 +537,7 @@ contract MarketFactory{
             (bool success, ) = msg.sender.call{value: winnings}("");
             require(success, "Transfer failed");
             
-            //Emit event
+            emit ClaimWinnings(msg.sender,market_id, market_type, bet_num);
         }else if(market_type==0){
             require(market_id < sports_markets_length,"Market doesnt exist");
             SportsMarket storage currentMarket=sport_markets[market_id];
@@ -543,7 +553,7 @@ contract MarketFactory{
             currentUserBet.position.has_claimed=true;
            (bool success, ) = msg.sender.call{value: winnings}("");
             require(success, "Transfer failed");
-            
+            emit ClaimWinnings(msg.sender,market_id, market_type, bet_num);
         }else{
             require(market_id < crypto_markets_length,"Market doesn't exist");
             CryptoMarket storage currentMarket=crypto_markets[market_id];
@@ -558,6 +568,7 @@ contract MarketFactory{
             currentUserBet.position.has_claimed=true;
             (bool success, ) = msg.sender.call{value: winnings}("");
             require(success, "Transfer failed");
+            emit ClaimWinnings(msg.sender,market_id, market_type, bet_num);
         }    
     }
 
@@ -677,7 +688,7 @@ contract MarketFactory{
 
     function set_treasury_wallet(
         address payable wallet
-    ) public OnlyAdmin{
+    ) public onlyOwner{
         treasuryWallet=wallet;
     }
 
@@ -709,5 +720,9 @@ contract MarketFactory{
             all_markets[i]=crypto_markets[i];
         }
         return all_markets;
+    }
+
+    function changeTreasuryWallet(address payable newWallet) public onlyOwner{
+        treasuryWallet=newWallet;
     }
 }

@@ -3,8 +3,8 @@ import hre from "hardhat";
 import dotenv from "dotenv";
 dotenv.config();
 async function main() {
-  //const provider = new ethers.JsonRpcProvider("https://rpc.api.moonbase.moonbeam.network");
-  const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545/");
+  const provider = new ethers.JsonRpcProvider("https://rpc.api.moonbeam.network");
+  // const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545/");
   const wallet = new ethers.Wallet(`${process.env.PRIVATE_KEY}`, provider);
 
   console.log("Deploying contract from:",await wallet.getAddress());
