@@ -11,7 +11,8 @@ async function main() {
 
   const ContractFactory = await ethers.getContractFactory("MarketFactory",wallet)
  
-  const contract = await ContractFactory.deploy(wallet.getAddress()); 
+  const deployerAddress = await wallet.getAddress();
+const contract = await ContractFactory.deploy();
   await contract.waitForDeployment();
 
   console.log("contract deployed at",contract.target)

@@ -7,14 +7,13 @@ import dotenv from "dotenv";
 dotenv.config()
 const config: HardhatUserConfig = {
   solidity: {
-    version: "0.8.21",
-    settings: {
-      viaIR: true, 
-      optimizer: {
-        enabled: true,
-        runs: 200,  
-      },
-    },
+    version: "0.8.20",
+    // settings: {
+    //   optimizer: {
+    //     enabled: true,
+    //     runs: 200,  
+    //   },
+    // },
   },
   networks: {
     moonbeam: {
@@ -22,10 +21,16 @@ const config: HardhatUserConfig = {
       accounts: [process.env.PRIVATE_KEY as string], 
       chainId: 1284, 
     },
+    // etherlink: {
+    //   url: 'https://node.mainnet.etherlink.com',
+    //   accounts: [process.env.PRIVATE_KEY as string], 
+    //  chainId: 42793 
+    // },
   },
   etherscan:{
     apiKey:{
-      moonbeam:`${process.env.ETHERSCAN_API_KEY as string}`
+      moonbeam:`${process.env.ETHERSCAN_API_KEY as string}`,
+      // etherlink: `${process.env.ETHERSCAN_API_KEY as string}`,
     },
     customChains:[
       {
@@ -35,7 +40,7 @@ const config: HardhatUserConfig = {
           apiURL: "https://api-moonbeam.moonscan.io/api",
           browserURL: "https://moonscan.io/",
         }
-      }
+      },
     ]
   }
 };
