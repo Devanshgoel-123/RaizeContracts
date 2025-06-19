@@ -21,11 +21,11 @@ const config: HardhatUserConfig = {
       accounts: [process.env.PRIVATE_KEY as string], 
       chainId: 1284, 
     },
-    // etherlink: {
-    //   url: 'https://node.mainnet.etherlink.com',
-    //   accounts: [process.env.PRIVATE_KEY as string], 
-    //  chainId: 42793 
-    // },
+    etherlink: {
+      url: 'https://node.mainnet.etherlink.com',
+      accounts: [process.env.PRIVATE_KEY as string], 
+     chainId: 42793 
+    },
   },
   etherscan:{
     apiKey:{

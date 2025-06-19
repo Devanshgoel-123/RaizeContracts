@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Ownable} from "@thirdweb-dev/contracts/extension/Ownable.sol";
 import {ReentrancyGuard} from "@thirdweb-dev/contracts/external-deps/openzeppelin/security/ReentrancyGuard.sol";
-
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 contract MarketFactory is Ownable, ReentrancyGuard {
     enum MarketOutcome {
         UNRESOLVED,
@@ -12,7 +12,8 @@ contract MarketFactory is Ownable, ReentrancyGuard {
     }
     mapping(address => bool) public isAdmin;
     uint256 public fees;
-
+    IERC20 public usdc_token=IERC20(0x796Ea11Fa2dD751eD01b53C372fFDB4AAa8f00F9);
+        //0x931715FEE2d06333043d11F658C8CE934aC61D0c); <- moonbeam
     address public feeRecipient=0x06Cf18ec8DaDA3E6b86c38DE2c5536811Cd9594C;
     
     struct Market {
@@ -165,17 +166,19 @@ contract MarketFactory is Ownable, ReentrancyGuard {
      * @param _marketId The ID of the market to buy shares in.
      * @param _isOptionA True if buying shares for Option A, false for Option B.
      */
-    function buyShares(uint256 _marketId, bool _isOptionA) external payable {
+    function buyShares(uint256 _marketId, bool _isOptionA, uint256 usdc_amount) public {
         Market storage market = markets[_marketId];
         require(
             block.timestamp < market.endTime,
             "Market trading period has ended"
         );
         require(!market.resolved, "Market already resolved");
-        require(msg.value > 0, "Amount must be positive");
+        require(usdc_amount > 0, "Amount must be positive");
 
-        uint256 feeAmount = (msg.value * fees) / 10000;
-        uint256 amount = msg.value - feeAmount; 
+       require(usdc_token.transferFrom(msg.sender, address(this), usdc_amount), "USDC transfer failed");
+
+        uint256 feeAmount = (usdc_amount * fees) / 10000;
+        uint256 amount = usdc_amount - feeAmount; 
 
         if (_isOptionA) {
             market.optionASharesBalance[msg.sender] += amount;
@@ -186,8 +189,7 @@ contract MarketFactory is Ownable, ReentrancyGuard {
         }
         
          if (feeAmount > 0 && feeRecipient != address(0)) {
-            (bool success, ) = feeRecipient.call{value: feeAmount}("");
-            require(success, "Fee transfer failed");
+            require(usdc_token.transfer(feeRecipient, feeAmount), "Fee transfer failed");
         }
 
         emit SharesPurchased(_marketId, msg.sender, _isOptionA, amount);
@@ -239,14 +241,13 @@ contract MarketFactory is Ownable, ReentrancyGuard {
         require(userShares > 0, "No winnings to claim");
         require(winningShares > 0, "No winning shares");
 
-        uint256 rewardRatio = (losingShares * 1e18) / winningShares; 
+        uint256 rewardRatio = (losingShares * 1e6) / winningShares; 
 
-        uint256 winnings = userShares + (userShares * rewardRatio) / 1e18;
+        uint256 winnings = userShares + (userShares * rewardRatio) / 1e6;
        
         
         market.hasClaimed[msg.sender] = true;
-        (bool success, ) = msg.sender.call{value: winnings}("");
-        require(success, "Native token transfer failed");
+        require(usdc_token.transfer(msg.sender, winnings),"Failed to claim winnings");
 
         emit Claimed(_marketId, msg.sender, winnings);
     }
@@ -379,9 +380,15 @@ contract MarketFactory is Ownable, ReentrancyGuard {
    */
    function withdrawAllFunds() external onlyAdmin nonReentrant returns (uint256 amount) {
     uint256 contractBalance = address(this).balance;
-    require(contractBalance > 0, "Contract has no balance");
-    (bool sent, ) = feeRecipient.call{value: contractBalance}("");
-    require(sent, "Failed to send funds");
+    uint256 usdc_balance = usdc_token.balanceOf(address(this));
+    require(contractBalance > 0 || usdc_balance > 0, "Contract has no balance");
+   if (contractBalance > 0) {
+        (bool sent, ) = feeRecipient.call{value: contractBalance}("");
+        require(sent, "Failed to send ETH");
+    }
+    if (usdc_balance > 0) {
+        require(usdc_token.transfer(feeRecipient, usdc_balance), "Failed to withdraw USDC");
+    }
     emit FundsWithdrawn(feeRecipient, contractBalance, msg.sender);
     return contractBalance;
 }
